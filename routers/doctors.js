@@ -17,12 +17,10 @@ aws.config.update({
 const singleUpload = upload.single("image");
 
 router.put("/image-upload/:id", async (req, res) => {
-
   var doctorInfo = await Doctor.findById(req.params.id).select("-password");
   var doctorImage = doctorInfo.image;
   if (doctorImage) {
     doctorImage = doctorInfo.image.key;
-    console.log(doctorImage);
     var s3 = new aws.S3();
     s3.deleteObject(
       {
@@ -79,7 +77,6 @@ router.get("/:id", async (req, res) => {
 });
 
 router.put("/:id", async (req, res) => {
-  console.log(req.body);
   let params = {
     email: req.body.email,
     name: req.body.name,
@@ -139,7 +136,6 @@ router.post("/login", async (req, res) => {
 });
 
 router.post("/register", async (req, res) => {
-  console.log(req.body);
   const doctorcheck = await Doctor.findOne({ email: req.body.email });
   if (doctorcheck) {
     res.status(400).send("Email Already registered");

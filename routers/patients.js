@@ -69,7 +69,6 @@ router.put("/pdf-upload", async (req, res) => {
 });
 
 router.put("/:id/deleteimage/:key", async (req, res) => {
-  console.log(req.params.key);
   const key = req.params.key;
   var s3 = new aws.S3();
   s3.deleteObject(
