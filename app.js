@@ -4,6 +4,49 @@ const cors = require("cors");
 require("dotenv/config");
 const authJwt = require("./helpers/jwt");
 const errorHandler = require("./helpers/error-handler");
+const cron = require("node-cron");
+const { Patient } = require("./models/patient");
+const { Doctor } = require("./models/doctor");
+const sgMail = require("@sendgrid/mail");
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const sendEmail = async () => {
+  const today = new Date();
+
+  const currentDate = today.getDate();
+  const currentMonth = today.getMonth();
+
+  const patients = await Patient.find();
+
+  patients.forEach(async (patient) => {
+    if (
+      patient.date_of_birth.getDate() === currentDate &&
+      patient.date_of_birth.getMonth() === currentMonth
+    ) {
+      const doc = await Doctor.findById(patient.doctor);
+      if (doc) {
+        if (doc.clinic_name !== undefined) {
+          const msg = {
+            to: patient.email, // Change to your recipient
+            from: "docsrecordmail@gmail.com", // Change to your verified sender
+            subject: "Happy Birthday !",
+            html: `<div>Hello ${patient.name}, <br />We wish you a very happy birthday from ${doc.clinic_name}. Enjoy your day ! Regards. </div>`,
+          };
+          sgMail
+            .send(msg)
+            .then(() => {
+              console.log("Email sent");
+            })
+            .catch((error) => {
+              console.error(error);
+            });
+        }
+      }
+    }
+  });
+};
+
+cron.schedule("10 0 * * *", sendEmail);
 
 const app = express();
 app.use(express.json());

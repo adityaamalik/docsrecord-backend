@@ -92,8 +92,7 @@ router.post("/success", async (req, res) => {
       })
       .catch((e) => {
         res.status(501).json({
-          msg:
-            "Payment successful, but some error occured in server. Contact support.",
+          msg: "Payment successful, but some error occured in server. Contact support.",
         });
         console.log(e);
       });
