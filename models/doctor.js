@@ -1,5 +1,4 @@
 const mongoose = require("mongoose");
-const { object } = require("twilio/lib/base/serialize");
 
 const doctorSchema = mongoose.Schema({
   email: {
