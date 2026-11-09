@@ -1,6 +1,9 @@
 const { Patient } = require("../models/patient");
 const express = require("express");
 const { Doctor } = require("../models/doctor");
+const { Visit } = require("../models/visit");
+const { Appointment } = require("../models/appointment");
+const { ensureLegacyVisit } = require("../services/visit-history");
 const router = express.Router();
 const mongoose = require("mongoose");
 const sgMail = require("@sendgrid/mail");
@@ -112,7 +115,7 @@ router.get(`/`, async (req, res) => {
   }
 
   const patientList = await Patient.find(filter)
-    .select("name phone_number address")
+    .select("name phone_number address reminders_opt_in")
     .sort({ date: -1 });
 
   if (!patientList) {
@@ -157,11 +160,24 @@ router.post(`/`, async (req, res) => {
     payment_method: req.body.payment_method,
     date_of_birth: req.body.date_of_birth,
     comments: req.body.comments,
+    reminders_opt_in: req.body.reminders_opt_in === true,
   });
 
   patient = await patient.save();
 
   if (!patient) return res.status(500).send("The patient cannot be created");
+
+  try {
+    await Visit.create({
+      patient: patient._id,
+      doctor: doctorid,
+      date: today,
+      treatments: (treatments || []).filter((t) => t && t.treatment),
+      total_cost: total_cost,
+    });
+  } catch (error) {
+    console.error(error);
+  }
 
   if (patient && doctor) {
     const msg = {
@@ -224,14 +240,29 @@ router.put("/:id", async (req, res) => {
     payment_method: req.body.payment_method,
     date_of_birth: req.body.date_of_birth,
     comments: req.body.comments,
+    reminders_opt_in: req.body.reminders_opt_in,
   };
   for (let prop in params) if (params[prop] === undefined) delete params[prop];
+
+  const before = await Patient.findById(req.params.id);
+  if (before && treatments) await ensureLegacyVisit(before);
 
   let patient = await Patient.findByIdAndUpdate(req.params.id, params, {
     new: true,
   });
 
   if (!patient) return res.status(500).send("the patient cannot be updated!");
+
+  if (treatments) {
+    await Visit.findOneAndUpdate(
+      { patient: patient._id },
+      {
+        treatments: treatments.filter((t) => t && t.treatment),
+        total_cost: total_cost,
+      },
+      { sort: { date: -1 } }
+    );
+  }
 
   const appointment = new Date(req.body.next_appointment_date);
 
@@ -282,6 +313,10 @@ router.delete("/:id", async (req, res) => {
     if (!patient) {
       return res.status(404).send();
     }
+    await Promise.all([
+      Visit.deleteMany({ patient: patient._id }),
+      Appointment.deleteMany({ patient: patient._id }),
+    ]);
     res.send("patient succesfully deleted");
   } catch (error) {
     res.status(500).send(error);

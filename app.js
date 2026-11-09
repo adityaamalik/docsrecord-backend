@@ -64,6 +64,12 @@ mongoose.connect(process.env.CONNECTION_STRING, {
 const doctorsRouter = require("./routers/doctors");
 const patientsRouter = require("./routers/patients");
 const paymentsRouter = require("./routers/payments");
+const visitsRouter = require("./routers/visits");
+const appointmentsRouter = require("./routers/appointments");
+const prescriptionTemplatesRouter = require("./routers/prescription-templates");
+const { startReminderJob } = require("./services/reminders");
+
+startReminderJob();
 
 //routes
 app.use(authJwt());
@@ -71,6 +77,9 @@ app.use(errorHandler);
 app.use("/doctors", doctorsRouter);
 app.use("/patients", patientsRouter);
 app.use("/payments", paymentsRouter);
+app.use("/visits", visitsRouter);
+app.use("/appointments", appointmentsRouter);
+app.use("/prescription-templates", prescriptionTemplatesRouter);
 
 app.get("/", (req, res) => {
   res.send("API is working fine !");
@@ -78,6 +87,13 @@ app.get("/", (req, res) => {
 
 app.get("/test", (req, res) => {
   res.send("API is working fine with valid credentials !");
+});
+
+// Reports a bad id as a client error and keeps stack traces out of responses.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  console.error(err);
+  res.status(err.name === "CastError" ? 400 : 500).send("Request failed");
 });
 
 app.listen(process.env.PORT, () =>

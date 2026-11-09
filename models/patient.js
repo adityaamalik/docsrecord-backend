@@ -49,6 +49,14 @@ const patientSchema = mongoose.Schema({
   next_appointment_time: {
     type: String,
   },
+  next_appointment_imported: {
+    type: Boolean,
+    default: false,
+  },
+  reminders_opt_in: {
+    type: Boolean,
+    default: false,
+  },
   doctor: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Doctor",
