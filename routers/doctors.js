@@ -1,12 +1,14 @@
 const { Doctor } = require("../models/doctor");
 const express = require("express");
 const router = express.Router();
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const upload = require("../services/file-upload");
 const _ = require("lodash");
 const aws = require("aws-sdk");
+const { OAuth2Client } = require("google-auth-library");
 require("dotenv").config();
+
+const googleClient = new OAuth2Client();
 
 aws.config.update({
   secretAccessKey: process.env.AWS_SECRET_ACCESS,
@@ -115,62 +117,65 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.post("/login", async (req, res) => {
-  const doctor = await Doctor.findOne({ email: req.body.email });
-  const secret = process.env.secret;
-  if (!doctor) {
-    return res.status(400).send("email incorrect");
-  } else if (doctor && bcrypt.compareSync(req.body.password, doctor.password)) {
-    const token = jwt.sign(
-      {
-        doctorId: doctor._id,
-      },
-      secret,
-      { expiresIn: "1d" }
-    );
-
-    res.status(200).send({ doctor: doctor, token: token });
-  } else {
-    res.status(400).send("password incorrect");
+router.post("/google", async (req, res) => {
+  // Without an audience the library accepts tokens issued for any Google app.
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId) {
+    console.error("GOOGLE_CLIENT_ID is not set");
+    return res.status(500).send("Google sign-in is not configured");
   }
-});
+  if (!req.body.credential) {
+    return res.status(400).send("Google credential is required");
+  }
 
-router.post("/register", async (req, res) => {
-  const doctorcheck = await Doctor.findOne({ email: req.body.email });
-  if (doctorcheck) {
-    res.status(400).send("Email Already registered");
-  } else {
-    var day = new Date();
-    let offset = day.getTimezoneOffset();
-    day = new Date(day.getTime() - offset * 60000);
-    var pay = new Date();
-    pay = new Date(pay.getTime() - offset * 60000);
-    pay = pay.setDate(pay.getDate() + 30);
-    const secret = process.env.secret;
-    let doctor = new Doctor({
-      email: req.body.email,
-      password: bcrypt.hashSync(req.body.password, 10),
-      name: req.body.name,
-      register_date: day,
-      payment_valid_till: pay,
-      clinic_name: req.body.clinic_name,
-      clinic_address: req.body.clinic_address,
-      visit_charges: req.body.visit_charges,
-      timings: req.body.timings,
-      phone_number: req.body.phone_number,
+  let profile;
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: req.body.credential,
+      audience: clientId,
     });
-    doctor = await doctor.save();
+    profile = ticket.getPayload();
+  } catch (error) {
+    return res.status(401).send("Invalid Google credential");
+  }
 
-    if (!doctor) return res.status(400).send("the doctor cannot be created!");
-    const token = jwt.sign(
-      {
-        doctoremail: req.body.email,
-      },
-      secret,
-      { expiresIn: "1d" }
-    );
-    var sanitizeddoctor = _.omit(doctor.toObject(), "password");
-    res.status(200).send({ doctor: sanitizeddoctor, token: token });
+  if (!profile.email || !profile.email_verified) {
+    return res.status(401).send("Google email is not verified");
+  }
+
+  try {
+    let doctor = await Doctor.findOne({ email: profile.email }).collation({
+      locale: "en",
+      strength: 2,
+    });
+
+    if (!doctor) {
+      var day = new Date();
+      let offset = day.getTimezoneOffset();
+      day = new Date(day.getTime() - offset * 60000);
+      var pay = new Date();
+      pay = new Date(pay.getTime() - offset * 60000);
+      pay = pay.setDate(pay.getDate() + 30);
+
+      doctor = await new Doctor({
+        email: profile.email,
+        name: profile.name || profile.email,
+        register_date: day,
+        payment_valid_till: pay,
+      }).save();
+    }
+
+    const token = jwt.sign({ doctorId: doctor._id }, process.env.secret, {
+      expiresIn: "1d",
+    });
+
+    res.status(200).send({
+      doctor: _.omit(doctor.toObject(), "password"),
+      token: token,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send("Some error occured");
   }
 });
 

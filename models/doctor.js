@@ -7,8 +7,6 @@ const doctorSchema = mongoose.Schema({
   },
   password: {
     type: String,
-
-    required: true,
   },
   name: {
     type: String,

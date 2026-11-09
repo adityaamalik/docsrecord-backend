@@ -9,8 +9,7 @@ function authJwt() {
     // isRevoked: isRevoked
   }).unless({
     path: [
-      `/doctors/login`,
-      `/doctors/register`,
+      `/doctors/google`,
       `/`,
       `/payments/orders`,
       `/payments/success`,
